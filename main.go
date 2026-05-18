@@ -101,6 +101,7 @@ func main() {
 	commandSet["find-stemcell-version"] = commands.NewFindStemcellVersion(outLogger, pivnetService)
 
 	commandSet["validate"] = commands.NewValidate(osfs.New(""))
+	commandSet["deduplicate-packages"] = commands.NewDeduplicatePackages(outLogger)
 	commandSet["release-notes"], err = commands.NewReleaseNotesCommand()
 	if err != nil {
 		log.Fatal(err)
