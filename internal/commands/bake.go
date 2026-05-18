@@ -23,6 +23,7 @@ import (
 	"github.com/pivotal-cf/kiln/internal/helper"
 	"github.com/pivotal-cf/kiln/pkg/bake"
 	"github.com/pivotal-cf/kiln/pkg/cargo"
+	"github.com/pivotal-cf/kiln/pkg/cargo/dedup"
 )
 
 //counterfeiter:generate -o ./fakes/interpolator.go --fake-name Interpolator . interpolator
@@ -210,6 +211,8 @@ type BakeOptions struct {
 	TileName string `short:"t" long:"tile-name" description:"select the bake_configuration matching the tile-name from the Kilnfile"`
 
 	IsFinal bool `long:"final" description:"this flag causes build metadata to be written to bake_records"`
+
+	DeduplicatePackages bool `long:"deduplicate-packages" description:"deduplicate compiled BOSH package blobs in the output tile after baking"`
 }
 
 func NewBakeWithInterfaces(interpolator interpolator, tileWriter tileWriter, outLogger *log.Logger, errLogger *log.Logger, templateVariablesService templateVariablesService, boshVariablesService metadataTemplatesParser, releasesService fromDirectories, stemcellService stemcellService, formsService metadataTemplatesParser, instanceGroupsService metadataTemplatesParser, jobsService metadataTemplatesParser, propertiesService metadataTemplatesParser, runtimeConfigsService metadataTemplatesParser, iconService iconService, metadataService metadataService, checksummer checksummer, fetcher jhanda.Command, fs FileSystem, homeDir flags.HomeDirFunc, writeBakeRecordFn writeBakeRecordSignature) Bake {
@@ -616,6 +619,16 @@ func (b Bake) Execute(args []string) error {
 			return err
 		}
 	}
+
+	if b.Options.DeduplicatePackages && b.Options.OutputFile != "" && !b.Options.MetadataOnly && !b.Options.StubReleases {
+		if _, err := dedup.DeduplicateTile(dedup.DeduplicateInput{
+			TilePath: b.Options.OutputFile,
+			Logger:   b.outLogger,
+		}); err != nil {
+			return fmt.Errorf("post-bake deduplication failed: %w", err)
+		}
+	}
+
 	return nil
 }
 
