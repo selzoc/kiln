@@ -17,6 +17,7 @@ import (
 type SharedPackage struct {
 	Fingerprint   string
 	Name          string
+	Version       string // package version from release.MF (e.g. "1.22.3")
 	BlobSize      int64
 	SourceRelease string // path of the first release tarball containing this package
 }
@@ -34,6 +35,7 @@ type ScanResult struct {
 func ScanCompiledReleaseTarballs(tarballPaths []string) (ScanResult, error) {
 	type pkgEntry struct {
 		name          string
+		version       string
 		blobSize      int64
 		sourceRelease string
 		count         int
@@ -54,6 +56,7 @@ func ScanCompiledReleaseTarballs(tarballPaths []string) (ScanResult, error) {
 			} else {
 				seen[pkg.Fingerprint] = &pkgEntry{
 					name:          pkg.Name,
+					version:       pkg.Version,
 					blobSize:      blobSizes[pkg.Name],
 					sourceRelease: p,
 					count:         1,
@@ -69,6 +72,7 @@ func ScanCompiledReleaseTarballs(tarballPaths []string) (ScanResult, error) {
 			shared = append(shared, SharedPackage{
 				Fingerprint:   fp,
 				Name:          e.name,
+				Version:       e.version,
 				BlobSize:      e.blobSize,
 				SourceRelease: e.sourceRelease,
 			})

@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -96,12 +97,24 @@ func DeduplicateTile(input DeduplicateInput) (DeduplicateResult, error) {
 	if err := CreateSharedReleaseTarball(synthInput, sharedPath); err != nil {
 		return DeduplicateResult{}, fmt.Errorf("synthesizing shared release: %w", err)
 	}
-	logger.Printf("Created %s (%d shared packages)\n", sharedReleaseFile, len(scanResult.SharedPackages))
 
-	// 6. Build the set of fingerprints to remove from individual releases.
+	// Log the shared-packages table sorted by name.
+	sortedShared := make([]SharedPackage, len(scanResult.SharedPackages))
+	copy(sortedShared, scanResult.SharedPackages)
+	sort.Slice(sortedShared, func(i, j int) bool { return sortedShared[i].Name < sortedShared[j].Name })
+
+	logger.Printf("Created %s (%d shared packages):\n", sharedReleaseFile, len(scanResult.SharedPackages))
+	for _, pkg := range sortedShared {
+		logger.Printf("  %-40s %.1f MB\n", pkg.Name+"/"+pkg.Version, float64(pkg.BlobSize)/1024/1024)
+	}
+
+	// 6. Build the set of fingerprints to remove from individual releases,
+	// and an index for name lookup when logging.
 	fingerprintsToRemove := make(map[string]bool, len(scanResult.SharedPackages))
+	fpToPkg := make(map[string]SharedPackage, len(scanResult.SharedPackages))
 	for _, pkg := range scanResult.SharedPackages {
 		fingerprintsToRemove[pkg.Fingerprint] = true
+		fpToPkg[pkg.Fingerprint] = pkg
 	}
 
 	// 7. Parse current release metadata entries.
@@ -138,7 +151,17 @@ func DeduplicateTile(input DeduplicateInput) (DeduplicateResult, error) {
 		}
 		saved := origSize - thinSize
 		bytesSaved += saved
-		logger.Printf("Fettling %s: saved %.1f MB\n", filepath.Base(relPath), float64(saved)/1024/1024)
+
+		// Build sorted list of package names removed from this release.
+		var removedNames []string
+		for _, fp := range scanResult.ReleasePackages[relPath] {
+			if pkg, ok := fpToPkg[fp]; ok {
+				removedNames = append(removedNames, pkg.Name+"/"+pkg.Version)
+			}
+		}
+		sort.Strings(removedNames)
+		logger.Printf("Fettling %s: saved %.1f MB (%s)\n",
+			filepath.Base(relPath), float64(saved)/1024/1024, strings.Join(removedNames, ", "))
 
 		// Update the metadata entry for this release.
 		if rm, ok := relMetas[filepath.Base(relPath)]; ok {

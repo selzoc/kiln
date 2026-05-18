@@ -3,8 +3,10 @@ package dedup_test
 import (
 	"archive/zip"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -66,13 +68,27 @@ func makeFakeTile(t *testing.T) string {
 func TestDeduplicateTile(t *testing.T) {
 	tilePath := makeFakeTile(t)
 
+	var logBuf strings.Builder
+	logger := log.New(&logBuf, "", 0)
+
 	result, err := dedup.DeduplicateTile(dedup.DeduplicateInput{
 		TilePath: tilePath,
 		Slug:     "my-tile",
+		Logger:   logger,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.PackagesDeduped)
 	assert.Positive(t, result.BytesSaved, "stripping blobs from 2 releases must report positive savings")
+
+	logOutput := logBuf.String()
+
+	// Shared-packages table: package name/version must appear under the Created line.
+	assert.Contains(t, logOutput, "golang-1-linux/fp-golang-shared",
+		"shared-packages table must list package name/version")
+
+	// Each fettled release must list the removed package names inline.
+	assert.Contains(t, logOutput, "(golang-1-linux/fp-golang-shared)",
+		"fettling lines must show which packages were removed")
 
 	zr, err := zip.OpenReader(tilePath)
 	require.NoError(t, err)

@@ -40,6 +40,8 @@ func TestScanCompiledReleaseTarballs_FindsDuplicates(t *testing.T) {
 	shared := result.SharedPackages[0]
 	assert.Equal(t, "fp-golang-abc123", shared.Fingerprint)
 	assert.Equal(t, "golang-1-linux", shared.Name)
+	// MakeCompiledReleaseTarball sets Version == Fingerprint; verify the field is populated.
+	assert.Equal(t, "fp-golang-abc123", shared.Version)
 	assert.Equal(t, int64(len(sharedBlob)), shared.BlobSize)
 	assert.NotEmpty(t, shared.SourceRelease, "should record which release to extract blob from")
 
