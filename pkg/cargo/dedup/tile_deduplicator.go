@@ -31,9 +31,11 @@ type DeduplicateResult struct {
 	BytesSaved      int64
 }
 
-// Minimum metadata_version required by OpsManager to trigger reconstruction.
-// Tiles below this version will be rejected by an OpsManager that understands dedup.
-const dedupMetadataVersion = "2.1"
+// dedupMetadataVersion is the metadata_version value stamped into deduplicated tiles.
+// Must match Versions::METADATA_VERSION in the first OpsManager release that includes
+// TileReleaseReconstructor. Old OpsManager (< this version) rejects tiles stamped with
+// this version via the fetch_migrations else branch.
+const dedupMetadataVersion = "3.4"
 
 // DeduplicateTile reads the .pivotal tile at input.TilePath, deduplicates compiled
 // package blobs across all releases, and writes the result to input.OutputPath
@@ -160,8 +162,10 @@ func DeduplicateTile(input DeduplicateInput) (DeduplicateResult, error) {
 			}
 		}
 		sort.Strings(removedNames)
-		logger.Printf("Fettling %s: saved %.1f MB (%s)\n",
-			filepath.Base(relPath), float64(saved)/1024/1024, strings.Join(removedNames, ", "))
+		logger.Printf("Fettling %s: saved %.1f MB\n", filepath.Base(relPath), float64(saved)/1024/1024)
+		for _, name := range removedNames {
+			logger.Printf("  - %s\n", name)
+		}
 
 		// Update the metadata entry for this release.
 		if rm, ok := relMetas[filepath.Base(relPath)]; ok {

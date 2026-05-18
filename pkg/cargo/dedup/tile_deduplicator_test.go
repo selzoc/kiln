@@ -86,9 +86,9 @@ func TestDeduplicateTile(t *testing.T) {
 	assert.Contains(t, logOutput, "golang-1-linux/fp-golang-shared",
 		"shared-packages table must list package name/version")
 
-	// Each fettled release must list the removed package names inline.
-	assert.Contains(t, logOutput, "(golang-1-linux/fp-golang-shared)",
-		"fettling lines must show which packages were removed")
+	// Each fettled release must list the removed package names as an indented sub-list.
+	assert.Contains(t, logOutput, "  - golang-1-linux/fp-golang-shared",
+		"fettling lines must show which packages were removed as indented list")
 
 	zr, err := zip.OpenReader(tilePath)
 	require.NoError(t, err)
@@ -171,6 +171,33 @@ func TestDeduplicateTile_NoDuplicates_IsNoop(t *testing.T) {
 	// Tile must be unchanged
 	newSize, _ := statSize(tilePath)
 	assert.Equal(t, origSize, newSize)
+}
+
+func TestDeduplicateTile_MetadataVersionIsSetToGateValue(t *testing.T) {
+	tilePath := makeFakeTile(t)
+	_, err := dedup.DeduplicateTile(dedup.DeduplicateInput{
+		TilePath: tilePath,
+		Slug:     "my-tile",
+	})
+	require.NoError(t, err)
+
+	zr, err := zip.OpenReader(tilePath)
+	require.NoError(t, err)
+	defer zr.Close()
+
+	for _, f := range zr.File {
+		if f.Name == "metadata/metadata.yml" {
+			rc, _ := f.Open()
+			data, _ := io.ReadAll(rc)
+			rc.Close()
+			var meta map[string]any
+			require.NoError(t, yaml.Unmarshal(data, &meta))
+			assert.Equal(t, "3.4", meta["metadata_version"],
+				"deduplicated tiles must carry metadata_version 3.4 to gate old OpsManager")
+			return
+		}
+	}
+	t.Fatal("metadata/metadata.yml not found in output tile")
 }
 
 func statSize(path string) (int64, error) {
