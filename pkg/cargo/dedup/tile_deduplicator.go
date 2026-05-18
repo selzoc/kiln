@@ -75,7 +75,7 @@ func DeduplicateTile(input DeduplicateInput) (DeduplicateResult, error) {
 	// 3. Determine product version and shared-release naming.
 	productVersion, _ := metadata["product_version"].(string)
 	sharedReleaseName := input.Slug + "-shared-packages"
-	sharedReleaseVersion := productVersion + "+shared"
+	sharedReleaseVersion := productVersion + "-shared"
 	sharedReleaseFile := sharedReleaseName + "-" + sharedReleaseVersion + ".tgz"
 
 	// 4. Extract stemcell info from the first source release.
@@ -96,7 +96,7 @@ func DeduplicateTile(input DeduplicateInput) (DeduplicateResult, error) {
 	if err := CreateSharedReleaseTarball(synthInput, sharedPath); err != nil {
 		return DeduplicateResult{}, fmt.Errorf("synthesizing shared release: %w", err)
 	}
-	logger.Printf("Created %s with %d shared packages\n", sharedReleaseFile, len(scanResult.SharedPackages))
+	logger.Printf("Created %s (%d shared packages)\n", sharedReleaseFile, len(scanResult.SharedPackages))
 
 	// 6. Build the set of fingerprints to remove from individual releases.
 	fingerprintsToRemove := make(map[string]bool, len(scanResult.SharedPackages))
@@ -138,7 +138,7 @@ func DeduplicateTile(input DeduplicateInput) (DeduplicateResult, error) {
 		}
 		saved := origSize - thinSize
 		bytesSaved += saved
-		logger.Printf("Thinned %s: saved %d bytes\n", filepath.Base(relPath), saved)
+		logger.Printf("Fettling %s: saved %.1f MB\n", filepath.Base(relPath), float64(saved)/1024/1024)
 
 		// Update the metadata entry for this release.
 		if rm, ok := relMetas[filepath.Base(relPath)]; ok {
