@@ -218,7 +218,7 @@ type BakeOptions struct {
 
 	IsFinal bool `long:"final" description:"this flag causes build metadata to be written to bake_records"`
 
-	DeduplicatePackages bool `long:"deduplicate-packages" description:"deduplicate compiled BOSH package blobs in the output tile after baking"`
+	Fettle bool `long:"fettle" description:"remove compile-time-only BOSH packages from the output tile after baking"`
 
 	SignPrivateKeyFile string `long:"sign-key-file" description:"path to Ed25519 private key (PKCS#8 PEM) used to sign the tile after baking"`
 }
@@ -628,12 +628,12 @@ func (b Bake) Execute(args []string) error {
 		}
 	}
 
-	if b.Options.DeduplicatePackages && b.Options.OutputFile != "" && !b.Options.MetadataOnly && !b.Options.StubReleases {
-		if _, err := dedup.DeduplicateTile(dedup.DeduplicateInput{
+	if b.Options.Fettle && b.Options.OutputFile != "" && !b.Options.MetadataOnly && !b.Options.StubReleases {
+		if _, err := dedup.StripTile(dedup.StripInput{
 			TilePath: b.Options.OutputFile,
 			Logger:   b.outLogger,
 		}); err != nil {
-			return fmt.Errorf("post-bake deduplication failed: %w", err)
+			return fmt.Errorf("post-bake compile-time package stripping failed: %w", err)
 		}
 	}
 
