@@ -1,3 +1,8 @@
+// @AI-Generated
+// Modified with AI assistance
+// Description:
+// 2026-05-19: Register sign and verify-signature commands - Cursor: Claude Sonnet 4.6
+
 package main
 
 import (
@@ -102,6 +107,8 @@ func main() {
 
 	commandSet["validate"] = commands.NewValidate(osfs.New(""))
 	commandSet["deduplicate-packages"] = commands.NewDeduplicatePackages(outLogger)
+	commandSet["sign"] = commands.NewSign()
+	commandSet["verify-signature"] = commands.NewVerifySignature()
 	commandSet["release-notes"], err = commands.NewReleaseNotesCommand()
 	if err != nil {
 		log.Fatal(err)

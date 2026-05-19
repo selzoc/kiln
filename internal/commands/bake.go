@@ -1,3 +1,8 @@
+// @AI-Generated
+// Modified with AI assistance
+// Description:
+// 2026-05-19: Add --sign-key-file flag to kiln bake for post-bake tile signing - Cursor: Claude Sonnet 4.6
+
 package commands
 
 import (
@@ -21,6 +26,7 @@ import (
 	"github.com/pivotal-cf/kiln/internal/builder"
 	"github.com/pivotal-cf/kiln/internal/commands/flags"
 	"github.com/pivotal-cf/kiln/internal/helper"
+	"github.com/pivotal-cf/kiln/internal/signing"
 	"github.com/pivotal-cf/kiln/pkg/bake"
 	"github.com/pivotal-cf/kiln/pkg/cargo"
 	"github.com/pivotal-cf/kiln/pkg/cargo/dedup"
@@ -213,6 +219,8 @@ type BakeOptions struct {
 	IsFinal bool `long:"final" description:"this flag causes build metadata to be written to bake_records"`
 
 	DeduplicatePackages bool `long:"deduplicate-packages" description:"deduplicate compiled BOSH package blobs in the output tile after baking"`
+
+	SignPrivateKeyFile string `long:"sign-key-file" description:"path to Ed25519 private key (PKCS#8 PEM) used to sign the tile after baking"`
 }
 
 func NewBakeWithInterfaces(interpolator interpolator, tileWriter tileWriter, outLogger *log.Logger, errLogger *log.Logger, templateVariablesService templateVariablesService, boshVariablesService metadataTemplatesParser, releasesService fromDirectories, stemcellService stemcellService, formsService metadataTemplatesParser, instanceGroupsService metadataTemplatesParser, jobsService metadataTemplatesParser, propertiesService metadataTemplatesParser, runtimeConfigsService metadataTemplatesParser, iconService iconService, metadataService metadataService, checksummer checksummer, fetcher jhanda.Command, fs FileSystem, homeDir flags.HomeDirFunc, writeBakeRecordFn writeBakeRecordSignature) Bake {
@@ -627,6 +635,17 @@ func (b Bake) Execute(args []string) error {
 		}); err != nil {
 			return fmt.Errorf("post-bake deduplication failed: %w", err)
 		}
+	}
+
+	if b.Options.SignPrivateKeyFile != "" && b.Options.OutputFile != "" && !b.Options.MetadataOnly {
+		signer, err := signing.NewSignerFromFile(b.Options.SignPrivateKeyFile)
+		if err != nil {
+			return fmt.Errorf("bake: failed to load signing key: %w", err)
+		}
+		if err := signer.Sign(b.Options.OutputFile); err != nil {
+			return fmt.Errorf("bake: failed to sign tile: %w", err)
+		}
+		b.outLogger.Printf("Signed %s\n", b.Options.OutputFile)
 	}
 
 	return nil

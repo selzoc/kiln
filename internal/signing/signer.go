@@ -25,7 +25,8 @@ func NewSignerFromKey(key ed25519.PrivateKey) Signer {
 	return Signer{privateKey: key}
 }
 
-// NewSignerFromFile loads an Ed25519 private key from a PKCS#8 PEM file.
+// NewSignerFromFile loads an Ed25519 private key from a PEM file.
+// Accepts PKCS#8 ("BEGIN PRIVATE KEY") and OpenSSH ("BEGIN OPENSSH PRIVATE KEY") formats.
 func NewSignerFromFile(path string) (Signer, error) {
 	key, err := loadPrivateKey(path)
 	if err != nil {
