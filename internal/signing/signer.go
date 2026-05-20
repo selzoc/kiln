@@ -112,7 +112,8 @@ func (s Signer) sign(tilePath string, force bool) error {
 			if strings.HasPrefix(f.Name, "signature/") {
 				continue
 			}
-			w, err := zw.CreateHeader(&f.FileHeader)
+			fh := f.FileHeader
+			w, err := zw.CreateHeader(&fh)
 			if err != nil {
 				return fmt.Errorf("creating zip entry %q: %w", f.Name, err)
 			}

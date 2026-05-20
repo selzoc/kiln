@@ -62,7 +62,8 @@ var _ = Describe("Verifier", func() {
 				if f.Name == "metadata/metadata.yml" {
 					addZipEntry(zw, f.Name, "name: TAMPERED\n")
 				} else {
-					w, _ := zw.CreateHeader(&f.FileHeader)
+					fh := f.FileHeader
+					w, _ := zw.CreateHeader(&fh)
 					rc, _ := f.Open()
 					_, _ = io.Copy(w, rc)
 					_ = rc.Close()
@@ -83,7 +84,8 @@ var _ = Describe("Verifier", func() {
 			var buf bytes.Buffer
 			zw := zip.NewWriter(&buf)
 			for _, f := range zr.File {
-				w, _ := zw.CreateHeader(&f.FileHeader)
+				fh := f.FileHeader
+				w, _ := zw.CreateHeader(&fh)
 				rc, _ := f.Open()
 				_, _ = io.Copy(w, rc)
 				_ = rc.Close()
