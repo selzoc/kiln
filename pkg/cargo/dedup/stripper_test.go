@@ -231,6 +231,37 @@ func TestStripCompileTimePackages_MultipleCompileTimeDeps_AllStripped(t *testing
 	assert.Equal(t, "nats-server", result.Manifest.CompiledPackages[0].Name)
 }
 
+func TestStripCompileTimePackages_CleansStrippedPackageFromDependencies(t *testing.T) {
+	// Mirrors the real failure: otel-collector lists golang-1.26-linux in its
+	// Dependencies inside release.MF. After stripping golang-1.26-linux, BOSH
+	// rejects the release because the dependency no longer exists.
+	pkgs := []dedup.FakePackage{
+		{Name: "golang-1.26-linux", Fingerprint: "fp-go"},
+		{Name: "otel-collector", Fingerprint: "fp-otel", Dependencies: []string{"golang-1.26-linux"}},
+	}
+	jobs := []dedup.FakeJob{
+		{Name: "otel-collector-agent", Packages: []string{"otel-collector"}},
+	}
+	b, err := dedup.MakeCompiledReleaseTarballWithJobs("tanzu-otel-collector", "0.11.29", "ubuntu-jammy/1.1107", pkgs, jobs)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	srcPath := filepath.Join(dir, "release.tgz")
+	dstPath := filepath.Join(dir, "release-stripped.tgz")
+	require.NoError(t, os.WriteFile(srcPath, b, 0644))
+
+	stripped, _, err := dedup.StripCompileTimePackages(srcPath, dstPath)
+	require.NoError(t, err)
+	require.Equal(t, []string{"golang-1.26-linux"}, stripped)
+
+	result, err := cargo.OpenBOSHReleaseTarball(dstPath)
+	require.NoError(t, err)
+	require.Len(t, result.Manifest.CompiledPackages, 1)
+	assert.Equal(t, "otel-collector", result.Manifest.CompiledPackages[0].Name)
+	assert.Empty(t, result.Manifest.CompiledPackages[0].Dependencies,
+		"golang-1.26-linux must be removed from otel-collector's Dependencies so BOSH accepts the release")
+}
+
 func TestStripCompileTimePackages_PreservesNonPackageEntries(t *testing.T) {
 	pkgs := []dedup.FakePackage{
 		{Name: "golang-1-linux", Fingerprint: "fp-go"},

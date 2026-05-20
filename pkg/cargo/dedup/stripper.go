@@ -166,6 +166,13 @@ func StripCompileTimePackages(inputPath, outputPath string) (strippedNames []str
 	kept := make([]cargo.CompiledBOSHReleasePackage, 0, len(manifest.CompiledPackages)-len(toStrip))
 	for _, pkg := range manifest.CompiledPackages {
 		if !toStrip[pkg.Name] {
+			cleanedDeps := pkg.Dependencies[:0:0]
+			for _, dep := range pkg.Dependencies {
+				if !toStrip[dep] {
+					cleanedDeps = append(cleanedDeps, dep)
+				}
+			}
+			pkg.Dependencies = cleanedDeps
 			kept = append(kept, pkg)
 		}
 	}

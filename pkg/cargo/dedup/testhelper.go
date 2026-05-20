@@ -22,6 +22,9 @@ type FakePackage struct {
 	// If empty, defaults to "sha256:"+Fingerprint for backward compatibility.
 	// Set explicitly when testing same-fingerprint/different-blob scenarios.
 	SHA1 string
+	// Dependencies lists the names of other compiled packages this package depends on,
+	// mirroring the dependencies field in release.MF.
+	Dependencies []string
 }
 
 // FakeJob describes one BOSH job to include in a fake release tarball.
@@ -49,11 +52,12 @@ func MakeCompiledReleaseTarballWithJobs(name, version, stemcell string, pkgs []F
 			sha1 = "sha256:" + p.Fingerprint
 		}
 		compiledPkgs = append(compiledPkgs, cargo.CompiledBOSHReleasePackage{
-			Name:        p.Name,
-			Version:     p.Fingerprint,
-			Fingerprint: p.Fingerprint,
-			SHA1:        sha1,
-			Stemcell:    stemcell,
+			Name:         p.Name,
+			Version:      p.Fingerprint,
+			Fingerprint:  p.Fingerprint,
+			SHA1:         sha1,
+			Stemcell:     stemcell,
+			Dependencies: p.Dependencies,
 		})
 	}
 	manifest := cargo.BOSHReleaseManifest{
