@@ -2,6 +2,7 @@
 // Modified with AI assistance
 // Description:
 // 2026-05-19: Add kiln sign command for signing .pivotal tiles with Ed25519 - Cursor: Claude Sonnet 4.6
+// 2026-05-20: Add --force flag; fail when tile is already signed without --force - Cursor: Claude Sonnet 4.6
 
 package commands
 
@@ -17,7 +18,8 @@ import (
 type Sign struct {
 	logger  *log.Logger
 	Options struct {
-		PrivateKeyFile string `short:"k" long:"private-key-file" required:"true" description:"path to Ed25519 private key (PKCS#8 PEM)"`
+		PrivateKeyFile string `short:"k" long:"private-key-file" required:"true" description:"path to Ed25519 private key (PKCS#8 or OpenSSH PEM)"`
+		Force          bool   `short:"f" long:"force" description:"overwrite an existing signature; by default kiln sign refuses to sign an already-signed tile"`
 	}
 }
 
@@ -42,8 +44,14 @@ func (s Sign) Execute(args []string) error {
 		return fmt.Errorf("kiln sign: %w", err)
 	}
 
-	if err := signer.Sign(tilePath); err != nil {
-		return fmt.Errorf("kiln sign: %w", err)
+	var signErr error
+	if s.Options.Force {
+		signErr = signer.SignForce(tilePath)
+	} else {
+		signErr = signer.Sign(tilePath)
+	}
+	if signErr != nil {
+		return fmt.Errorf("kiln sign: %w", signErr)
 	}
 
 	s.logger.Printf("Signed %s\n", tilePath)

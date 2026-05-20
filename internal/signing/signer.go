@@ -2,6 +2,7 @@
 // Modified with AI assistance
 // Description:
 // 2026-05-19: Add Signer for post-hoc Ed25519 tile signing - Cursor: Claude Sonnet 4.6
+// 2026-05-20: Guard Sign against overwriting existing signatures; add SignForce and IsSigned - Cursor: Claude Sonnet 4.6
 
 package signing
 
@@ -35,10 +36,43 @@ func NewSignerFromFile(path string) (Signer, error) {
 	return Signer{privateKey: key}, nil
 }
 
-// Sign rewrites the .pivotal zip at tilePath, replacing any pre-existing
-// signature/ entries with freshly computed ones. The file is replaced atomically
-// via a temp-file rename.
+// ErrAlreadySigned is returned by Sign when the tile already contains a
+// signature and force is false.
+var ErrAlreadySigned = fmt.Errorf("tile is already signed; use --force to overwrite")
+
+// IsSigned reports whether the tile at tilePath already contains a signature.
+func IsSigned(tilePath string) (bool, error) {
+	data, err := os.ReadFile(tilePath)
+	if err != nil {
+		return false, fmt.Errorf("reading tile: %w", err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return false, fmt.Errorf("opening tile as zip: %w", err)
+	}
+	for _, f := range zr.File {
+		if f.Name == "signature/manifest.sig" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// Sign rewrites the .pivotal zip at tilePath with a fresh Ed25519 signature.
+// If the tile already contains a signature and force is false, Sign returns
+// ErrAlreadySigned. Pass force=true (or use the --force flag on kiln sign)
+// to explicitly overwrite an existing signature.
+// The file is replaced atomically via a temp-file rename.
 func (s Signer) Sign(tilePath string) error {
+	return s.sign(tilePath, false)
+}
+
+// SignForce is like Sign but always overwrites any existing signature.
+func (s Signer) SignForce(tilePath string) error {
+	return s.sign(tilePath, true)
+}
+
+func (s Signer) sign(tilePath string, force bool) error {
 	data, err := os.ReadFile(tilePath)
 	if err != nil {
 		return fmt.Errorf("reading tile: %w", err)
@@ -46,6 +80,14 @@ func (s Signer) Sign(tilePath string) error {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return fmt.Errorf("opening tile as zip: %w", err)
+	}
+
+	if !force {
+		for _, f := range zr.File {
+			if f.Name == "signature/manifest.sig" {
+				return ErrAlreadySigned
+			}
+		}
 	}
 
 	manifest, err := ComputeManifestFromZip(zr)

@@ -57,6 +57,28 @@ var _ = Describe("Sign", func() {
 			Expect(verifier.Verify(tilePath)).To(Succeed())
 		})
 
+		It("returns an error when the tile is already signed and --force is not set", func() {
+			cmd := commands.NewSign()
+			Expect(cmd.Execute([]string{"--private-key-file", privateKeyPath, tilePath})).To(Succeed())
+
+			cmd2 := commands.NewSign()
+			err := cmd2.Execute([]string{"--private-key-file", privateKeyPath, tilePath})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("already signed"))
+		})
+
+		It("overwrites the signature when --force is set on an already-signed tile", func() {
+			cmd := commands.NewSign()
+			Expect(cmd.Execute([]string{"--private-key-file", privateKeyPath, tilePath})).To(Succeed())
+
+			cmd2 := commands.NewSign()
+			Expect(cmd2.Execute([]string{"--private-key-file", privateKeyPath, "--force", tilePath})).To(Succeed())
+
+			verifier, err := signing.NewVerifierFromFile(publicKeyPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(verifier.Verify(tilePath)).To(Succeed())
+		})
+
 		It("returns an error when the private key file does not exist", func() {
 			cmd := commands.NewSign()
 			Expect(cmd.Execute([]string{"--private-key-file", "/no/such/key.pem", tilePath})).To(HaveOccurred())

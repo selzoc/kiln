@@ -57,10 +57,30 @@ var _ = Describe("Signer", func() {
 			Expect(verifier.Verify(tilePath)).To(Succeed())
 		})
 
-		It("can re-sign a tile that already has signature entries", func() {
+		It("returns ErrAlreadySigned when the tile is already signed", func() {
 			signer := signing.NewSignerFromKey(priv)
 			Expect(signer.Sign(tilePath)).To(Succeed())
-			Expect(signer.Sign(tilePath)).To(Succeed()) // sign again
+
+			err := signer.Sign(tilePath)
+			Expect(err).To(MatchError(signing.ErrAlreadySigned))
+		})
+
+		It("does not modify the tile when it refuses to overwrite", func() {
+			signer := signing.NewSignerFromKey(priv)
+			Expect(signer.Sign(tilePath)).To(Succeed())
+
+			statBefore, _ := os.Stat(tilePath)
+			_ = signer.Sign(tilePath) // should fail
+			statAfter, _ := os.Stat(tilePath)
+			Expect(statAfter.ModTime()).To(Equal(statBefore.ModTime()))
+		})
+	})
+
+	Describe("SignForce", func() {
+		It("overwrites an existing signature and produces a valid tile", func() {
+			signer := signing.NewSignerFromKey(priv)
+			Expect(signer.Sign(tilePath)).To(Succeed())
+			Expect(signer.SignForce(tilePath)).To(Succeed())
 
 			data, _ := os.ReadFile(tilePath)
 			zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
@@ -72,10 +92,25 @@ var _ = Describe("Signer", func() {
 					sigCount++
 				}
 			}
-			Expect(sigCount).To(Equal(2), "should have exactly 2 signature entries, not duplicates")
+			Expect(sigCount).To(Equal(2), "should have exactly 2 signature entries, no duplicates")
 
 			verifier := signing.NewVerifierFromKey(pub)
 			Expect(verifier.Verify(tilePath)).To(Succeed())
+		})
+	})
+
+	Describe("IsSigned", func() {
+		It("returns false for an unsigned tile", func() {
+			signed, err := signing.IsSigned(tilePath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(signed).To(BeFalse())
+		})
+
+		It("returns true after signing", func() {
+			Expect(signing.NewSignerFromKey(priv).Sign(tilePath)).To(Succeed())
+			signed, err := signing.IsSigned(tilePath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(signed).To(BeTrue())
 		})
 	})
 })
