@@ -41,6 +41,28 @@ func MakeCompiledReleaseTarball(name, version, stemcell string, pkgs []FakePacka
 	return MakeCompiledReleaseTarballWithJobs(name, version, stemcell, pkgs, nil)
 }
 
+// fakeReleaseManifest is a local struct used only inside the testhelper so that generated
+// release.MF files include a jobs: section — mirroring real compiled releases — without
+// modifying the production BOSHReleaseManifest type.
+type fakeReleaseManifest struct {
+	Name               string                             `yaml:"name"`
+	Version            string                             `yaml:"version"`
+	CommitHash         string                             `yaml:"commit_hash,omitempty"`
+	UncommittedChanges bool                               `yaml:"uncommitted_changes"`
+	Jobs               []fakeJobManifestEntry             `yaml:"jobs,omitempty"`
+	CompiledPackages   []cargo.CompiledBOSHReleasePackage `yaml:"compiled_packages"`
+	Packages           []cargo.BOSHReleasePackage         `yaml:"packages,omitempty"`
+}
+
+// fakeJobManifestEntry mirrors the per-job entry in a real compiled release.MF jobs: section.
+type fakeJobManifestEntry struct {
+	Name        string   `yaml:"name"`
+	Version     string   `yaml:"version"`
+	Fingerprint string   `yaml:"fingerprint"`
+	SHA1        string   `yaml:"sha1"`
+	Packages    []string `yaml:"packages,omitempty"`
+}
+
 // MakeCompiledReleaseTarballWithJobs is like MakeCompiledReleaseTarball but also includes
 // job entries (./jobs/<name>.tgz). Each job tarball contains a job.MF listing its runtime
 // packages, enabling tests of compile-time package stripping logic.
@@ -60,9 +82,22 @@ func MakeCompiledReleaseTarballWithJobs(name, version, stemcell string, pkgs []F
 			Dependencies: p.Dependencies,
 		})
 	}
-	manifest := cargo.BOSHReleaseManifest{
+
+	jobEntries := make([]fakeJobManifestEntry, 0, len(jobs))
+	for _, j := range jobs {
+		jobEntries = append(jobEntries, fakeJobManifestEntry{
+			Name:        j.Name,
+			Version:     "fake-version-" + j.Name,
+			Fingerprint: "fake-fp-" + j.Name,
+			SHA1:        "sha256:fake-sha1-" + j.Name,
+			Packages:    j.Packages,
+		})
+	}
+
+	manifest := fakeReleaseManifest{
 		Name:             name,
 		Version:          version,
+		Jobs:             jobEntries,
 		CompiledPackages: compiledPkgs,
 	}
 	mfBytes, err := yaml.Marshal(manifest)

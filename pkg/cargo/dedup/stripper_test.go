@@ -3,6 +3,7 @@ package dedup_test
 import (
 	"archive/tar"
 	"compress/gzip"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -229,6 +230,65 @@ func TestStripCompileTimePackages_MultipleCompileTimeDeps_AllStripped(t *testing
 	require.NoError(t, err)
 	require.Len(t, result.Manifest.CompiledPackages, 1)
 	assert.Equal(t, "nats-server", result.Manifest.CompiledPackages[0].Name)
+}
+
+func TestStripCompileTimePackages_PreservesManifestJobsSection(t *testing.T) {
+	// Real compiled release.MF files contain a jobs: section with job fingerprints and SHA1s.
+	// When we rewrite release.MF to strip packages, that section must survive intact so BOSH
+	// can register the jobs. This test guards against the regression where the entire jobs:
+	// section was silently dropped by yaml.Marshal on a struct with no Jobs field.
+	pkgs := []dedup.FakePackage{
+		{Name: "golang-1-linux", Fingerprint: "fp-go"},
+		{Name: "bpm", Fingerprint: "fp-bpm", Dependencies: []string{"golang-1-linux"}},
+	}
+	jobs := []dedup.FakeJob{
+		{Name: "bpm", Packages: []string{"bpm"}},
+	}
+	b, err := dedup.MakeCompiledReleaseTarballWithJobs("bpm", "1.4.29", "ubuntu-jammy/1.1107", pkgs, jobs)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	srcPath := filepath.Join(dir, "bpm.tgz")
+	dstPath := filepath.Join(dir, "bpm-stripped.tgz")
+	require.NoError(t, os.WriteFile(srcPath, b, 0644))
+
+	stripped, _, err := dedup.StripCompileTimePackages(srcPath, dstPath)
+	require.NoError(t, err)
+	require.Equal(t, []string{"golang-1-linux"}, stripped)
+
+	result, err := cargo.OpenBOSHReleaseTarball(dstPath)
+	require.NoError(t, err)
+
+	// The jobs: section must survive in release.MF. BOSH uses it to register job metadata.
+	raw := extractReleaseMF(t, dstPath)
+	assert.Contains(t, raw, "jobs:", "jobs: section must be preserved in release.MF after stripping")
+	assert.Contains(t, raw, "fake-version-bpm", "job entry details must be preserved")
+	_ = result
+}
+
+// extractReleaseMF reads the raw release.MF bytes from a BOSH release tarball.
+func extractReleaseMF(t *testing.T, tgzPath string) string {
+	t.Helper()
+	f, err := os.Open(tgzPath)
+	require.NoError(t, err)
+	defer f.Close()
+	gr, err := gzip.NewReader(f)
+	require.NoError(t, err)
+	defer gr.Close()
+	tr := tar.NewReader(gr)
+	for {
+		hdr, err := tr.Next()
+		if err != nil {
+			break
+		}
+		if filepath.Base(hdr.Name) == "release.MF" {
+			data, err := io.ReadAll(tr)
+			require.NoError(t, err)
+			return string(data)
+		}
+	}
+	t.Fatal("release.MF not found in tarball")
+	return ""
 }
 
 func TestStripCompileTimePackages_CleansStrippedPackageFromDependencies(t *testing.T) {

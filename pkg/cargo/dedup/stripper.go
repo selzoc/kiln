@@ -176,17 +176,48 @@ func StripCompileTimePackages(inputPath, outputPath string) (strippedNames []str
 			kept = append(kept, pkg)
 		}
 	}
-	manifest.CompiledPackages = kept
-	newManifestBytes, err := yaml.Marshal(manifest)
-	if err != nil {
-		return nil, "", err
-	}
 
-	sha256hex, err = rewriteWithStripping(inputPath, outputPath, toStrip, newManifestBytes)
+	sha256hex, err = rewriteWithStripping(inputPath, outputPath, toStrip, kept)
 	if err != nil {
 		return nil, "", err
 	}
 	return names, sha256hex, nil
+}
+
+// replaceCompiledPackagesInManifest takes the raw bytes of a release.MF and returns new bytes
+// where only the compiled_packages key has been replaced with the provided kept list.
+// All other fields — jobs:, license:, no_compression:, etc. — are preserved verbatim.
+func replaceCompiledPackagesInManifest(rawManifest []byte, kept []cargo.CompiledBOSHReleasePackage) ([]byte, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(rawManifest, &root); err != nil {
+		return nil, fmt.Errorf("parsing manifest YAML: %w", err)
+	}
+	if len(root.Content) == 0 {
+		return rawManifest, nil
+	}
+	doc := root.Content[0] // DocumentNode wraps a MappingNode
+
+	// Build the replacement compiled_packages node from the kept slice.
+	keptBytes, err := yaml.Marshal(kept)
+	if err != nil {
+		return nil, err
+	}
+	var keptDoc yaml.Node
+	if err := yaml.Unmarshal(keptBytes, &keptDoc); err != nil {
+		return nil, err
+	}
+
+	// Walk the mapping and swap only the compiled_packages value node.
+	for i := 0; i+1 < len(doc.Content); i += 2 {
+		if doc.Content[i].Value == "compiled_packages" {
+			if len(keptDoc.Content) > 0 {
+				doc.Content[i+1] = keptDoc.Content[0]
+			}
+			break
+		}
+	}
+
+	return yaml.Marshal(&root)
 }
 
 // FindJobReferencedPackages reads a BOSH compiled release tarball and returns the set of
@@ -287,9 +318,10 @@ func readJobPackages(r io.Reader) ([]string, error) {
 	return nil, nil
 }
 
-// rewriteWithStripping copies inputPath to outputPath, replacing release.MF with newManifest
-// and omitting compiled_packages blobs listed in toStrip. Returns SHA256 of the output tarball.
-func rewriteWithStripping(inputPath, outputPath string, toStrip map[string]bool, newManifest []byte) (string, error) {
+// rewriteWithStripping copies inputPath to outputPath, rewriting release.MF to replace only
+// the compiled_packages section (preserving jobs:, license:, and all other fields), and
+// omitting compiled_packages blobs listed in toStrip. Returns SHA256 of the output tarball.
+func rewriteWithStripping(inputPath, outputPath string, toStrip map[string]bool, kept []cargo.CompiledBOSHReleasePackage) (string, error) {
 	in, err := os.Open(inputPath)
 	if err != nil {
 		return "", err
@@ -327,6 +359,14 @@ func rewriteWithStripping(inputPath, outputPath string, toStrip map[string]bool,
 		base := filepath.Base(hdr.Name)
 
 		if base == "release.MF" {
+			rawManifest, err := io.ReadAll(tr)
+			if err != nil {
+				return "", err
+			}
+			newManifest, err := replaceCompiledPackagesInManifest(rawManifest, kept)
+			if err != nil {
+				return "", fmt.Errorf("rewriting release.MF: %w", err)
+			}
 			newHdr := *hdr
 			newHdr.Size = int64(len(newManifest))
 			if err := tw.WriteHeader(&newHdr); err != nil {
