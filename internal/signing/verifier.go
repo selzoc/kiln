@@ -97,7 +97,7 @@ func verifyManifestCoverage(zr *zip.Reader, manifestYAML []byte) error {
 
 	zipFiles := make(map[string]*zip.File)
 	for _, f := range zr.File {
-		if !strings.HasPrefix(f.Name, "signature/") {
+		if !strings.HasPrefix(f.Name, "signature/") && !f.FileInfo().IsDir() {
 			zipFiles[f.Name] = f
 		}
 	}

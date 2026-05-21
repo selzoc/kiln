@@ -47,6 +47,11 @@ func writeTmpTile(entries map[string]string) string {
 	f, err := os.CreateTemp("", "*.pivotal")
 	Expect(err).NotTo(HaveOccurred())
 	zw := zip.NewWriter(f)
+	
+	// Add a directory entry to ensure it is ignored by the manifest
+	_, err = zw.Create("metadata/")
+	Expect(err).NotTo(HaveOccurred())
+
 	for name, content := range entries {
 		addZipEntry(zw, name, content)
 	}

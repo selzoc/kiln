@@ -29,7 +29,7 @@ type Manifest struct {
 func ComputeManifestFromZip(zr *zip.Reader) (Manifest, error) {
 	files := make(map[string]string)
 	for _, f := range zr.File {
-		if strings.HasPrefix(f.Name, "signature/") {
+		if strings.HasPrefix(f.Name, "signature/") || f.FileInfo().IsDir() {
 			continue
 		}
 		rc, err := f.Open()
